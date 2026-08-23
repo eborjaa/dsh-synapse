@@ -1,0 +1,70 @@
+# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; `!!js` expressions allowed).
+- insert:
+    # Synapse vault exposed as MCP tools (local stdio child). The vault (synapse-vault)
+    # and the harness stay separate — MCP is the only bridge (playbook P1).
+    - id: mcp-synapse
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: synapse
+        transport: stdio
+        # Absolute node path: dsh scrubs the child's env, so bare `node` may not be on PATH.
+        command: {{NODE}}
+        args:
+          - {{VAULT}}/node_modules/@eborja/synapse/bin/synapse-mcp.mjs
+        cwd: {{VAULT}}
+        env:
+          SYNAPSE_VAULT: {{VAULT}}
+          SYNAPSE_MCP_SURFACE: orchestrator
+
+    # Harness-enforced Synapse loop: a claim_and_brief that is never released is caught at
+    # turn-stopping and either forced back to the model or auto-released. Mechanism, not a
+    # prompt instruction — the model reported success it had not achieved.
+    - id: hooks-synapse
+      name: '@deepseek-ai/dsh-hooks-claude-code'
+      config:
+        # Read ONCE at load — no live reload, and a bad path registers nothing silently.
+        configPath: {{DSH_HOME}}/hooks/synapse-hooks.json
+        projectDir: {{VAULT}}
+        defaultTimeoutMs: 60000
+
+# The order-0 persona. Presets shadow this with a scoped `deployment:persona`, but headless
+# composes no preset roster, so this row IS the identity there. Keep it STATIC: order-0 sits at
+# the front of the prompt, so anything varying per request would invalidate the cached prefix.
+# It states the protocol; the hooks enforce it. Both, deliberately.
+- id: system-prompt
+  config:
+    persona: >-
+      You are a Synapse agent powered by the {{model}} model, working in {{cwd}}.
+
+      The Synapse vault answers through the mcp__synapse__* tools, and reading it is always
+      cheaper than guessing. Before answering a question about the vault, call synapse_brief with
+      your agent id and the one hub for that domain. Before starting work that may already be
+      done, call synapse_history. When the topic shifts mid-session, call synapse_recall rather
+      than re-briefing.
+
+      To delegate: call synapse_claim_and_brief with a canonical job id built from stable facts,
+      hand its briefing to a subagent, and then ALWAYS close the job with synapse_spawn_release
+      carrying a real summary of what the doer produced. A claim you never release blocks that job
+      for its full lease and loses the result from memory; the harness will force you back to
+      finish it.
+
+      Never write db/synapse.db or any generated view, and never self-merge. Propose changes and
+      stop — a human reviews them.
+
+# Synapse briefings must arrive WHOLE. spill-policy replaces any plain-text tool result over
+# maxInlineBytes with a preview + file locator; at the 50000 default a `lean` synapse_brief
+# (~60KB) was silently truncated ("Omitted 10194 bytes"), forcing the agent to re-read it.
+# Raised so a fat (`--profile fat`, ~120KB) brief still lands inline; genuinely runaway output
+# still spills.
+- id: spill-policy
+  config:
+    maxInlineBytes: 70000
+
+# Let an agent pause for a human decision instead of guessing. The `user-questions` service is
+# already mounted in base; only the model-facing tool is missing here (the web `standard` preset
+# already carries it). One row.
+- insert:
+    - id: tool-ask-user
+      name: '@deepseek-ai/dsh-tool-ask-user'

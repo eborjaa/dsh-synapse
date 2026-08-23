@@ -1,0 +1,19 @@
+{
+  "name": "@eborja/dsh-synapse",
+  "version": "0.1.0",
+  "description": "Wire a Synapse context vault into the DeepSeek Harness — MCP client row, lease-governance hooks, and the agent skills, installed into ~/.dsh",
+  "type": "module",
+  "license": "MIT",
+  "author": "Emmanuel Borja",
+  "repository": { "type": "git", "url": "git+https://github.com/eborjaa/dsh-synapse.git" },
+  "engines": { "node": ">=22" },
+  "bin": { "dsh-synapse": "bin/install.mjs" },
+  "files": ["bin/", "hooks/", "profiles/", "README.md"],
+  "keywords": ["synapse", "deepseek-harness", "dsh", "mcp", "context-vault", "agents"],
+  "scripts": {
+    "install:dry": "node bin/install.mjs",
+    "install:write": "node bin/install.mjs --write"
+  },
+  "peerDependencies": { "@eborja/synapse": ">=0.19.0" },
+  "peerDependenciesMeta": { "@eborja/synapse": { "optional": true } }
+}

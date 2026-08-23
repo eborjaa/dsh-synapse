@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "mcp__synapse__synapse_claim_and_brief",
+        "hooks": [{ "type": "command", "command": "{{NODE}} {{DSH_HOME}}/hooks/lease-open.mjs", "timeout": 20 }]
+      },
+      {
+        "matcher": "mcp__synapse__synapse_spawn_release",
+        "hooks": [{ "type": "command", "command": "{{NODE}} {{DSH_HOME}}/hooks/lease-close.mjs", "timeout": 20 }]
+      },
+      {
+        "matcher": "mcp__synapse__.*",
+        "hooks": [{ "type": "command", "command": "{{NODE}} {{DSH_HOME}}/hooks/synapse-touch.mjs", "timeout": 15 }]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "subagent|subagent_fork",
+        "hooks": [{ "type": "command", "command": "{{NODE}} {{DSH_HOME}}/hooks/claim-guard.mjs", "timeout": 20 }]
+      }
+    ],
+    "Stop": [
+      {
+        "hooks": [{ "type": "command", "command": "{{NODE}} {{DSH_HOME}}/hooks/lease-guard.mjs", "timeout": 180 }]
+      }
+    ]
+  }
+}

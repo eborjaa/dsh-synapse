@@ -1,0 +1,5 @@
+node_modules/
+*.tgz
+# Never commit credentials — DSH keeps them in ~/.dsh/.credentials.yaml, outside this package.
+.credentials.yaml
+.env

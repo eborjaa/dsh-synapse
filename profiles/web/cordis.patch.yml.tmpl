@@ -1,0 +1,39 @@
+# Your patch layer for this dsh profile, applied after every bundle layer:
+# a top-level YAML array of loader patch entries (id-targeted config
+# overrides, disables, and insert lists; `!!js` expressions allowed).
+- insert:
+    # Synapse vault exposed as MCP tools (local stdio child). The vault (synapse-vault)
+    # and the harness stay separate — MCP is the only bridge (playbook P1).
+    - id: mcp-synapse
+      name: '@deepseek-ai/dsh-mcp-client'
+      config:
+        serverName: synapse
+        transport: stdio
+        # Absolute node path: dsh scrubs the child's env, so bare `node` may not be on PATH.
+        command: {{NODE}}
+        args:
+          - {{VAULT}}/node_modules/@eborja/synapse/bin/synapse-mcp.mjs
+        cwd: {{VAULT}}
+        env:
+          SYNAPSE_VAULT: {{VAULT}}
+          SYNAPSE_MCP_SURFACE: orchestrator
+
+    # Harness-enforced Synapse loop: a claim_and_brief that is never released is caught at
+    # turn-stopping and either forced back to the model or auto-released. Mechanism, not a
+    # prompt instruction — the model reported success it had not achieved.
+    - id: hooks-synapse
+      name: '@deepseek-ai/dsh-hooks-claude-code'
+      config:
+        # Read ONCE at load — no live reload, and a bad path registers nothing silently.
+        configPath: {{DSH_HOME}}/hooks/synapse-hooks.json
+        projectDir: {{VAULT}}
+        defaultTimeoutMs: 60000
+
+# Synapse briefings must arrive WHOLE. spill-policy replaces any plain-text tool result over
+# maxInlineBytes with a preview + file locator; at the 50000 default a `lean` synapse_brief
+# (~60KB) was silently truncated ("Omitted 10194 bytes"), forcing the agent to re-read it.
+# Raised so a fat (`--profile fat`, ~120KB) brief still lands inline; genuinely runaway output
+# still spills.
+- id: spill-policy
+  config:
+    maxInlineBytes: 70000
