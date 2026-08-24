@@ -46,7 +46,17 @@ function findVault(start) {
   }
 }
 
-const VAULT = resolve(arg("vault", process.env.SYNAPSE_VAULT || findVault(process.cwd()) || ""));
+// Resolution order: --vault, then the vault you are STANDING IN, then $SYNAPSE_VAULT.
+//
+// cwd deliberately beats the env var, matching @eborja/synapse's own resolveVault({preferCwd:true}).
+// `synapse install --write` EXPORTS $SYNAPSE_VAULT from your shell rc, so on any machine that already
+// has a vault the env var is always set — and with the old order (env first) `cd my-other-vault &&
+// npx @eborja/dsh-synapse install --write` silently wired the FIRST vault while reporting it plainly
+// enough that nobody read it. Standing in a vault is an unambiguous statement of which one you mean.
+const cwdVault = findVault(process.cwd());
+const explicit = arg("vault", null);
+const VAULT = resolve(explicit || cwdVault || process.env.SYNAPSE_VAULT || "");
+const VAULT_SOURCE = explicit ? "--vault" : cwdVault ? "the directory you are in" : "$SYNAPSE_VAULT";
 if (!VAULT || !existsSync(VAULT)) {
   console.error(
     "Could not locate a Synapse vault.\n"
@@ -54,6 +64,15 @@ if (!VAULT || !existsSync(VAULT)) {
     + "A vault is a directory containing _meta/tools/context.manifest.json.",
   );
   process.exit(1);
+}
+// Say so when the two disagree — this wires ~/.dsh globally, so pointing it at the wrong vault is
+// silent and lasting.
+const envVault = process.env.SYNAPSE_VAULT ? resolve(process.env.SYNAPSE_VAULT) : null;
+if (envVault && envVault !== VAULT) {
+  console.warn(
+    `\n⚠ $SYNAPSE_VAULT is ${envVault}, but this run targets ${VAULT}\n`
+    + `  (resolved from ${VAULT_SOURCE}). Pass --vault to be explicit if that is not what you meant.\n`,
+  );
 }
 
 const MCP_BIN = join(VAULT, "node_modules", "@eborja", "synapse", "bin", "synapse-mcp.mjs");
@@ -105,7 +124,7 @@ if (existsSync(SKILLS_SRC)) {
 
 // ── report ─────────────────────────────────────────────────────────────────────────────────────
 console.log(`\ndsh-synapse install${write ? "" : "  (dry-run)"}`);
-console.log(`  vault    : ${VAULT}`);
+console.log(`  vault    : ${VAULT}   (from ${VAULT_SOURCE})`);
 console.log(`  dsh home : ${DSH_HOME}`);
 console.log(`  node     : ${NODE}\n`);
 for (const p of planned) {

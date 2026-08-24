@@ -39,6 +39,17 @@ Run it from inside the vault and it finds everything itself. From anywhere else,
 npx @eborja/dsh-synapse install --vault /path/to/your-vault
 ```
 
+**Which vault it picks**, in order: `--vault`, then **the vault you are standing in**, then
+`$SYNAPSE_VAULT`. The directory you are in deliberately beats the environment variable — `synapse
+install --write` exports `$SYNAPSE_VAULT` from your shell rc, so on a machine that already has a vault
+that variable is *always* set, and letting it win meant `cd my-other-vault && npx @eborja/dsh-synapse
+install --write` silently wired the first one. When the two disagree the command says so before doing
+anything. The banner always names the vault and where it came from:
+
+```
+  vault    : /Users/you/synapse/synapse-vault   (from the directory you are in)
+```
+
 The dry-run is the default, and it is the real plan — same resolution, same file comparison, just no
 writes:
 
