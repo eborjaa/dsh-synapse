@@ -16,7 +16,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, readdirSync, symlin
 import { join, dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { homedir } from "node:os";
-import { execFileSync } from "node:child_process";
+import { readVaultMcpEnv, yamlMcpExtraEnv } from "../hooks/lib.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 const PKG = resolve(HERE, "..");
@@ -78,7 +78,17 @@ if (envVault && envVault !== VAULT) {
 const MCP_BIN = join(VAULT, "node_modules", "@eborja", "synapse", "bin", "synapse-mcp.mjs");
 const SKILLS_SRC = join(VAULT, "node_modules", "@eborja", "synapse", ".dsh", "skills");
 
-const fill = (s) => s.replaceAll("{{DSH_HOME}}", DSH_HOME).replaceAll("{{NODE}}", NODE).replaceAll("{{VAULT}}", VAULT);
+// Extra env already on this vault's MCP configs (ZEPHYR_MCP_DISABLE, NODE_OPTIONS, …). DSH scrubs
+// the child's environment, so these have to be written into cordis — `synapse mcp-config --env`
+// otherwise only reaches Claude/Cursor.
+const extraEnv = readVaultMcpEnv(VAULT);
+const EXTRA_ENV = yamlMcpExtraEnv(extraEnv);
+
+const fill = (s) => s
+  .replaceAll("{{DSH_HOME}}", DSH_HOME)
+  .replaceAll("{{NODE}}", NODE)
+  .replaceAll("{{VAULT}}", VAULT)
+  .replaceAll("{{EXTRA_ENV}}", EXTRA_ENV);
 
 const planned = [];
 const note = (action, path, detail = "") => planned.push({ action, path, detail });
@@ -94,6 +104,7 @@ function put(destPath, content) {
 
 // ── hooks ──────────────────────────────────────────────────────────────────────────────────────
 for (const f of readdirSync(join(PKG, "hooks"))) {
+  if (f.endsWith(".test.mjs")) continue;
   const src = readFileSync(join(PKG, "hooks", f), "utf8");
   put(join(DSH_HOME, "hooks", f.replace(/\.tmpl$/, "")), fill(src));
 }
@@ -125,8 +136,9 @@ if (existsSync(SKILLS_SRC)) {
 // ── report ─────────────────────────────────────────────────────────────────────────────────────
 console.log(`\ndsh-synapse install${write ? "" : "  (dry-run)"}`);
 console.log(`  vault    : ${VAULT}   (from ${VAULT_SOURCE})`);
-console.log(`  dsh home : ${DSH_HOME}`);
-console.log(`  node     : ${NODE}\n`);
+  console.log(`  dsh home : ${DSH_HOME}`);
+  console.log(`  node     : ${NODE}`);
+  console.log(`  mcp env  : ${Object.keys(extraEnv).join(", ")}   (from this vault's existing MCP config)\n`);
 for (const p of planned) {
   const tag = { create: "+", overwrite: "~", symlink: "→", relink: "→", unchanged: " ", skip: "!" }[p.action] ?? "?";
   console.log(`  ${tag} ${p.action.padEnd(10)} ${p.path.replace(homedir(), "~")} ${p.detail}`);

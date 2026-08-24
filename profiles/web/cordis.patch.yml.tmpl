@@ -17,6 +17,7 @@
         env:
           SYNAPSE_VAULT: {{VAULT}}
           SYNAPSE_MCP_SURFACE: orchestrator
+{{EXTRA_ENV}}
 
     # Harness-enforced Synapse loop: a claim_and_brief that is never released is caught at
     # turn-stopping and either forced back to the model or auto-released. Mechanism, not a
