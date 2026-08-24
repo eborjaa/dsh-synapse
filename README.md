@@ -102,11 +102,19 @@ plus `synapse_claim_and_brief` / `synapse_spawn_release` / `synapse_history` / `
     env:
       SYNAPSE_VAULT: /path/to/vault
       SYNAPSE_MCP_SURFACE: orchestrator
+      NODE_OPTIONS: "--experimental-sqlite"   # always
+      # plus every extra key already on this vault's .mcp.json
+      # (e.g. ZEPHYR_MCP_DISABLE: "1" from `synapse mcp-config --env`)
 ```
 
 **The node path must be absolute.** DSH scrubs a spawned child's environment, so a bare `node` may not
 resolve — under a version manager it usually doesn't. The installer records `process.execPath`, i.e.
 whichever node you ran it with. Switch node versions later and re-run the installer, or pass `--node`.
+
+**Extra env is copied, not re-typed.** `synapse mcp-config --env KEY=VAL` writes into `.mcp.json`.
+`dsh-synapse install` reads that file and puts the same keys into `cordis.patch.yml`, because DSH
+does not inherit Claude/Cursor's env. Re-run `dsh-synapse install --write` after you change MCP env
+on the vault — there is nothing to paste onto the other machine.
 
 ### 2. Lease-governance hooks
 

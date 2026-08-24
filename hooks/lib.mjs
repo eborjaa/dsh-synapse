@@ -18,6 +18,45 @@ import { spawn } from "node:child_process";
 export const VAULT = process.env.SYNAPSE_VAULT || "{{VAULT}}";
 export const MCP_BIN = `${VAULT}/node_modules/@eborja/synapse/bin/synapse-mcp.mjs`;
 
+// Keys the installer / hooks always set themselves — never copied from a client config.
+const MCP_ENV_OWNED = new Set(["SYNAPSE_VAULT", "SYNAPSE_MCP_SURFACE"]);
+
+/**
+ * Extra env the vault's existing MCP client configs already carry (everything except the two
+ * keys we own). DSH scrubs a spawned child's environment, so these MUST be written into
+ * cordis.patch.yml and into hook spawns — `synapse mcp-config --env KEY=VAL` otherwise only
+ * reaches Claude/Cursor, and a vault plugin that throws at import (e.g. zephyr.mjs without
+ * ZEPHYR_MCP_DISABLE=1) takes the whole synapse-mcp process down. NODE_OPTIONS is always
+ * included: node:sqlite is flagged on the supported Node range.
+ */
+export function readVaultMcpEnv(vault) {
+  const out = { NODE_OPTIONS: "--experimental-sqlite" };
+  const probes = [
+    join(vault, ".mcp.json"),
+    join(vault, ".cursor", "mcp.json"),
+  ];
+  for (const path of probes) {
+    if (!existsSync(path)) continue;
+    try {
+      const env = JSON.parse(readFileSync(path, "utf8"))?.mcpServers?.synapse?.env;
+      if (!env || typeof env !== "object") continue;
+      for (const [k, v] of Object.entries(env)) {
+        if (MCP_ENV_OWNED.has(k) || v == null) continue;
+        out[k] = String(v);
+      }
+      return out;
+    } catch { /* unreadable / !json */ }
+  }
+  return out;
+}
+
+/** YAML block under `env:` — every value JSON-quoted so `1` stays the string the plugin checks. */
+export function yamlMcpExtraEnv(env, indent = "          ") {
+  return Object.entries(env)
+    .map(([k, v]) => `${indent}${k}: ${JSON.stringify(v)}`)
+    .join("\n");
+}
+
 /** Read the whole hook payload from stdin. Hooks are always fed one JSON object. */
 export async function readPayload() {
   const chunks = [];
@@ -80,7 +119,12 @@ export function callSynapseTool(name, args, timeoutMs = 120000) {
   return new Promise((resolve) => {
     const child = spawn(process.execPath, [MCP_BIN], {
       cwd: VAULT,
-      env: { ...process.env, SYNAPSE_VAULT: VAULT, SYNAPSE_MCP_SURFACE: "orchestrator" },
+      env: {
+        ...process.env,
+        ...readVaultMcpEnv(VAULT),
+        SYNAPSE_VAULT: VAULT,
+        SYNAPSE_MCP_SURFACE: "orchestrator",
+      },
       stdio: ["pipe", "pipe", "ignore"],
     });
     let buf = "";
